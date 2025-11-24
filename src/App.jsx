@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useState } from "react";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "./context/theme";
-import { AuthProvider } from "./IdeateX-25/context/AuthContext";
+import { AuthProvider } from "./IdeateX25/context/AuthContext";
 import { Analytics } from "@vercel/analytics/react";
 
 import { ToastContainer } from "react-toastify";
@@ -15,7 +15,7 @@ const ApplicationClosed = React.lazy(() =>
 );
 const Loader = React.lazy(() => import("./components/Loader/Loader"));
 const Navbar = React.lazy(() => import("./components/Navbar/Navbar"));
-const IdeateX = React.lazy(() => import("./IdeateX-25/page"));
+const IdeateX = React.lazy(() => import("./IdeateX25/page"));
 const Home = React.lazy(() => import("./pages/Home/Home"));
 const Discover = React.lazy(() => import("./pages/discover/Discover"));
 const OurTeam = React.lazy(() => import("./pages/OurTeam/OurTeam"));
@@ -99,11 +99,11 @@ import Aos from "aos";
 import "aos/dist/aos.css";
 import RecruitmentResult from "./components/RecruitmentResult/RecruitmentResult";
 import PrivacyPolicy2 from "./pages/PrivacyPolicy/Policy2";
-const RegistrationPage = React.lazy(() => import("./IdeateX-25/RegisterationPage"));
-const PaymentPage = React.lazy(() => import("./IdeateX-25/Components/PaymentPage"));
-const TeamDashboardPage = React.lazy(() => import("./IdeateX-25/Components/TeamDashboardPage"));
-const LoginPage = React.lazy(() => import("./IdeateX-25/LoginPage"));
-const PasswordResetPage = React.lazy(() => import("./IdeateX-25/ResetPassPage"));
+const RegistrationPage = React.lazy(() => import("./IdeateX25/RegisterationPage"));
+const PaymentPage = React.lazy(() => import("./IdeateX25/Components/PaymentPage"));
+const TeamDashboardPage = React.lazy(() => import("./IdeateX25/Components/TeamDashboardPage"));
+const LoginPage = React.lazy(() => import("./IdeateX25/LoginPage"));
+const PasswordResetPage = React.lazy(() => import("./IdeateX25/ResetPassPage"));
 // import CommingSoon from "./endeavour/CommingSoon/CommingSoon";
 // import NewCerti from "./components/newCerti/NewCerti";
 
