@@ -1,3 +1,5 @@
+@use "sass:math";
+
 $n:5; /* number of images*/
 
 .past-winner-container{
@@ -32,28 +34,28 @@ $n:5; /* number of images*/
 
 @for $i from 1 to ($n + 1) {
   .gallery > img:nth-child(#{$i}) {
-    animation-delay: calc(#{(1 - $i)/$n}*var(--d));
+    animation-delay: calc(#{math.div(1 - $i, $n)}*var(--d));
     --r: #{(-20 + random(40))*1deg};
   }
 }
 
 @keyframes slide {
-  #{50/$n}%  {transform: translateX(120%) rotate(var(--r))}
+  #{math.div(50, $n)}%  {transform: translateX(120%) rotate(var(--r))}
   0%,
   100%,
-  #{100/$n}% {transform: translateX(0%)   rotate(var(--r))}
+  #{math.div(100, $n)}% {transform: translateX(0%)   rotate(var(--r))}
 }
 
 @keyframes z-order {
-  #{50/$n}%,
-  #{100/$n}% {z-index: 1}
-  #{100 - 100/$n}% {z-index: 2}
+  #{math.div(50, $n)}%,
+  #{math.div(100, $n)}% {z-index: 1}
+  #{100 - math.div(100, $n)}% {z-index: 2}
 }
 
 @keyframes z-order-last {
-  #{50/$n}%,
-  #{100/$n}% {z-index: 1}
-  #{100 - 50/$n}% {z-index: 2}
+  #{math.div(50, $n)}%,
+  #{math.div(100, $n)}% {z-index: 1}
+  #{100 - math.div(50, $n)}% {z-index: 2}
 }
 
 .glimpses-text{
