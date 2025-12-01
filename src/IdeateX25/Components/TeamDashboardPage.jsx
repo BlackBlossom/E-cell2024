@@ -440,9 +440,7 @@ export default function TeamDashboardPage() {
   const paymentPending = (() => {
     const t = teamData || {};
 
-    if (t.isPendingPayment === true) return true;
-    if (t.isPaid === false) return true;
-    if (t.paymentStatus && ["pending", "unpaid", "failed"].includes(String(t.paymentStatus).toLowerCase())) return true;
+    if (t.isPendingPayment === true ) return true;
     return false;
   })();
 

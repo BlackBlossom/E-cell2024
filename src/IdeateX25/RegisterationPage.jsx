@@ -84,10 +84,10 @@ export default function RegistrationPage() {
         payload
       );
       if (response.status === 201) {
-        console.log(
-          "User registered successfully, showing OTP verification",
-          formData
-        );
+        // console.log(
+        //   "User registered successfully, showing OTP verification",
+        //   formData
+        // );
         setShowOtpVerification(true);
       }
     } catch (err) {
@@ -171,7 +171,7 @@ export default function RegistrationPage() {
       );
 
       if (response.data.success === true) {
-        console.log("Joined team successfully:", response.data);
+        // console.log("Joined team successfully:", response.data);
         // Save team data if needed
         localStorage.setItem("ideatex_teamID", response.data.data.team._id);
         localStorage.setItem("ideatex_userID", response.data.data.userId);
