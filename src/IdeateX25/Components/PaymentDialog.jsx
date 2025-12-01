@@ -1,226 +1,216 @@
-import { Copy, Upload, X, CheckCircle } from "lucide-react";
-import { useState } from "react";
+import { X, CheckCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import axios from "axios";
 
-export default function PaymentDialog({ isOpen, onClose, onSubmit, formData, paymentSuccess }) {
-  const [transactionId, setTransactionId] = useState("");
-  const [screenshot, setScreenshot] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const [teamName, setTeamName] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+// Razorpay payment dialog - creates order on backend and opens Razorpay checkout
+export default function PaymentDialog({ isOpen, onClose, onSubmit, formData, paymentSuccess, amount = 100 }) {
+  const [teamName, setTeamName] = useState(formData?.teamName || "");
+  // screenshot removed per request
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState("");
 
-  const upiId = "example@upi";
+  const API_BASE = import.meta.env.VITE_IDEATEX_API_BASE_URL;
 
-  const handleCopy = () => {
-    // Using document.execCommand as a fallback for potential iframe restrictions
-    try {
-      const el = document.createElement("textarea");
-      el.value = upiId;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy text: ", err);
-      // You could show an error message here
+  useEffect(() => {
+    if (isOpen) {
+      setTeamName(formData?.teamName || "");
+      setError("");
     }
+  }, [isOpen, formData]);
+
+  // removed file handling
+
+  // Load Razorpay script
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (document.getElementById("razorpay-script")) return resolve(true);
+      const script = document.createElement("script");
+      script.id = "razorpay-script";
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
   };
 
-  const handleFileChange = (event) => {
-    if (event.target.files && event.target.files[0]) {
-      setScreenshot(event.target.files[0]);
+  const createOrder = async (amountToUse = amount * 100) => {
+    // amountToUse in paise. default uses `amount` prop (in rupees) * 100.
+    const teamId = localStorage.getItem("ideatex_teamID") || null;
+    if (!teamId) {
+      // If backend requires teamId we should surface this clearly to the user
+      throw new Error("teamId_missing");
     }
+    const url = `${API_BASE}/api/v1/payment/create-order`;
+    const payload = { teamId, amount: amountToUse };
+    const res = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("ideatex_token")}`,
+      },
+    });
+    return res.data;
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    if (!transactionId || !screenshot || !teamName) {
-      // You could show an error message here
-      console.error("Team Name, Transaction ID and Screenshot are required.");
+  const verifyPayment = async (verifyPayload) => {
+    const url = `${API_BASE}/api/v1/payment/verify-payment`;
+    const res = await axios.post(url, verifyPayload, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("ideatex_token")}`,
+      },
+    });
+    return res.data;
+  };
+
+  const handlePayWithRazorpay = async () => {
+    if (!teamName) {
+      setError("Please provide a team name before proceeding.");
       return;
     }
-    setIsSubmitting(true);
+
+    setIsProcessing(true);
+    setError("");
+
     try {
-      await onSubmit({
-        transactionId,
-        screenshot,
-        teamName,
-        formData,
-      });
-      // Reset form
-      setTransactionId("");
-      setScreenshot(null);
-      setTeamName("");
-    } catch (error) {
-      console.error("Payment submission failed:", error);
-    } finally {
-      setIsSubmitting(false);
+      const ok = await loadRazorpayScript();
+      if (!ok) {
+        setError("Failed to load payment gateway. Try again later.");
+        setIsProcessing(false);
+        return;
+      }
+
+      const orderResp = await createOrder();
+      if (!orderResp.success || !orderResp.data) {
+        setError(orderResp.message || "Failed to create payment order");
+        setIsProcessing(false);
+        return;
+      }
+
+      const data = orderResp.data; // { orderId, razorpayOrderId, amount, currency, key }
+
+      const options = {
+        key: data.key,
+        amount: data.amount,
+        currency: data.currency || "INR",
+        name: "IdeateX 2025",
+        description: `Team registration - ${teamName}`,
+        order_id: data.razorpayOrderId,
+        handler: async function (response) {
+          // response: { razorpay_payment_id, razorpay_order_id, razorpay_signature }
+          try {
+            const verifyPayload = {
+              orderId: data.orderId || data.razorpayOrderId,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            };
+
+            const verifyResp = await verifyPayment(verifyPayload);
+            if (verifyResp.success) {
+              // Call parent onSubmit so the app can save team and redirect
+              await onSubmit({
+                transactionId: response.razorpay_payment_id,
+                teamName,
+                paymentVerified: true,
+                backendResponse: verifyResp,
+              });
+              setIsProcessing(false);
+              // leave dialog open while parent handles navigation or close here
+            } else {
+              setError(verifyResp.message || "Payment verification failed");
+              setIsProcessing(false);
+            }
+          } catch (err) {
+            console.error("Verify error", err);
+            setError(err.response?.data?.message || "Payment verification failed");
+            setIsProcessing(false);
+          }
+        },
+        prefill: {
+          name: formData?.name || "",
+          email: formData?.email || "",
+          contact: formData?.contact || "",
+        },
+        theme: { color: "#9700d1" },
+      };
+
+      // eslint-disable-next-line no-undef
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error(err);
+      if (err.message === "teamId_missing") {
+        setError("teamId and amount are required — please create or select a team before paying.");
+      } else if (err.response?.data?.message) {
+        // Map backend error messages
+        setError(err.response.data.message || "Payment failed to start. Try again.");
+      } else {
+        setError("Payment failed to start. Try again.");
+      }
+      setIsProcessing(false);
     }
   };
 
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      aria-labelledby="payment-dialog-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative sm:max-w-4xl w-full bg-[#1a1a1a] border border-gray-800 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit} className="py-6 px-6">
-          <div className="flex flex-col md:flex-row gap-8 md:gap-6">
-            {/* Left Side: QR Code */}
-            <div className="flex flex-col items-center space-y-4 md:w-2/5 flex-shrink-0">
-              <p className="text-gray-400 text-sm text-center md:hidden">
-                Scan the QR code or copy the UPI ID to pay.
-              </p>
-              <div className="h-64 w-64 bg-gray-800 flex items-center justify-center rounded-xl border-2 border-gray-700">
-                {/* Placeholder for QR Code */}
-                <img
-                  src="https://placehold.co/256x256/333333/999999?text=Scan+QR+to+Pay"
-                  alt="QR Code"
-                  className="rounded-lg h-full w-full object-cover"
-                />
-              </div>
-              <div className="flex items-center space-x-2 bg-[#232323] px-4 py-2 rounded-lg border border-gray-700">
-                <span className="font-medium text-gray-300 text-sm">
-                  {upiId}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-purple-500/10 text-gray-400 hover:text-purple-400"
-                  aria-label="Copy UPI ID"
-                >
-                  {copied ? (
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              <p className="text-gray-400 text-xs text-center hidden md:block max-w-xs pt-2">
-                Scan the QR code or copy the UPI ID to complete your payment.
-              </p>
-            </div>
+      <div className="relative sm:max-w-lg w-full bg-[#1a1a1a] border border-gray-800 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto p-6">
+        <div className="flex items-start justify-between">
+          <h2 className="text-2xl text-gray-100 font-semibold">Complete Payment</h2>
+          <button type="button" onClick={onClose} className="text-gray-400">
+            <X className="h-6 w-6" />
+          </button>
+        </div>
 
-            {/* Right Side: Form */}
-            <div className="flex-1 justify-center items-center space-y-6">
-              {/* Transaction ID Input */}
-
-              <div className="flex items-center justify-between pt-4">
-                <h2
-                  id="payment-dialog-title"
-                  className="text-2xl text-gray-100 font-semibold"
-                >
-                  Complete Payment
-                </h2>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition-colors"
-                  aria-label="Close dialog"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              {paymentSuccess && (
-                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mt-4">
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span className="text-green-400 font-medium">Payment successful!</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Team Name Input */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="teamName"
-                  className="text-sm text-gray-400 font-medium"
-                >
-                  Team Name <span className="text-red-400">*</span>
-                </label>
-                <input
-                  id="teamName"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  placeholder="Enter team name"
-                  className="block px-4 py-3.5 w-full text-gray-100 bg-[#2a2a2a] border border-gray-700 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all outline-none placeholder-gray-500"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label
-                  htmlFor="transactionId"
-                  className="text-sm text-gray-400 font-medium"
-                >
-                  Transaction ID <span className="text-red-400">*</span>
-                </label>
-                <input
-                  id="transactionId"
-                  value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  placeholder="Enter transaction ID"
-                  className="block px-4 py-3.5 w-full text-gray-100 bg-[#2a2a2a] border border-gray-700 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all outline-none placeholder-gray-500"
-                  required
-                />
-              </div>
-
-              {/* Payment Screenshot Upload */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="screenshot"
-                  className="text-sm text-gray-400 font-medium"
-                >
-                  Payment Screenshot <span className="text-red-400">*</span>
-                </label>
-                <div className="flex flex-col items-center space-y-3">
-                  <input
-                    id="screenshot"
-                    type="file"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    accept="image/*"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-center border-2 border-dashed border-gray-700 hover:border-purple-500 hover:bg-purple-500/10 text-gray-300 rounded-xl py-6 transition-colors"
-                    onClick={() =>
-                      document.getElementById("screenshot")?.click()
-                    }
-                  >
-                    <Upload className="mr-2 h-5 w-5" />
-                    {screenshot ? "Change Screenshot" : "Upload Screenshot"}
-                  </button>
-                  {screenshot && (
-                    <div className="text-sm text-gray-400 bg-[#232323] px-4 py-2 rounded-lg w-full text-center border border-gray-700 truncate">
-                      ✓ {screenshot.name}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white font-semibold rounded-full hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!teamName || !transactionId || !screenshot || isSubmitting || paymentSuccess}
-              >
-                {isSubmitting ? "Submitting..." : paymentSuccess ? "Redirecting..." : "Submit Payment"}
-              </button>
+        {paymentSuccess && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mt-4">
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <span className="text-green-400 font-medium">Payment successful!</span>
             </div>
           </div>
-        </form>
+        )}
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="text-sm text-gray-400">Team Name</label>
+            <input
+              value={teamName}
+              disabled
+              onChange={(e) => setTeamName(e.target.value)}
+              className="block w-full px-4 py-3.5 mt-2 bg-[#2a2a2a] border border-gray-700 rounded-xl text-gray-100"
+              placeholder="Team name"
+            />
+          </div>
+
+          {/* Screenshot removed per request */}
+
+          {error && <div className="text-sm text-red-400">{error}</div>}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={handlePayWithRazorpay}
+              disabled={isProcessing}
+              className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white font-semibold rounded-full"
+            >
+              {isProcessing ? "Processing..." : "Pay with Razorpay"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+              }}
+              className="w-full py-3 bg-gray-700 text-white rounded-full"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

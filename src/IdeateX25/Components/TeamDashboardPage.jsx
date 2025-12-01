@@ -54,6 +54,8 @@ export default function TeamDashboardPage() {
   const [showJoinPopup, setShowJoinPopup] = useState(false);
   const [teamCode, setTeamCode] = useState("");
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [creatingTeamName, setCreatingTeamName] = useState("");
 
   const fetchTeamMembers = async () => {
     const teamId = localStorage.getItem("ideatex_teamID");
@@ -220,35 +222,58 @@ export default function TeamDashboardPage() {
 
   const handlePaymentSubmit = async (paymentData) => {
     try {
-      const formData = new FormData();
-      formData.append("teamName", paymentData.teamName);
-      formData.append("paymentTransactionId", paymentData.transactionId);
-      formData.append("paymentScreenshot", paymentData.screenshot);
+      if (paymentData.paymentVerified && paymentData.backendResponse?.success) {
+        const team = paymentData.backendResponse.data.team;
+        const teamId = team._id || team.teamId || team.id;
+        const leaderId = team.leaderId || team.leader || paymentData.backendResponse.data.team.leaderId;
+        if (teamId) localStorage.setItem("ideatex_teamID", teamId);
+        if (leaderId) localStorage.setItem("ideatex_userID", leaderId);
+        setShowPaymentDialog(false);
+        await fetchTeamMembers();
+      } else {
+        setError(paymentData.backendResponse?.message || "Failed to create team");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to create team");
+    }
+  };
 
+  const API_BASE = import.meta.env.VITE_IDEATEX_API_BASE_URL;
+
+  const handleCreateTeamRequest = async (teamName) => {
+    if (!teamName || !teamName.trim()) {
+      setError("Team name is required");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
       const response = await axios.post(
-        `${import.meta.env.VITE_IDEATEX_API_BASE_URL}/api/v1/addTeam`,
-        formData,
+        `${API_BASE}/api/v1/addTeam`,
+        { teamName },
         {
           headers: {
-            "Content-Type": "multipart/form-data",
             Authorization: `Bearer ${localStorage.getItem("ideatex_token")}`,
+            "Content-Type": "application/json",
           },
         }
       );
 
-      if (response.data.success) {
-        localStorage.setItem("ideatex_teamID", response.data.data.team._id);
-        localStorage.setItem(
-          "ideatex_userID",
-          response.data.data.team.leaderId
-        );
-        setShowPaymentDialog(false);
-        await fetchTeamMembers();
+      if (response.data?.success) {
+        const team = response.data.data.team;
+        localStorage.setItem("ideatex_teamID", team._id || team.teamId || team.id);
+        localStorage.setItem("ideatex_userID", response.data.data.team.leaderId || localStorage.getItem("ideatex_userID"));
+        setShowCreateTeamModal(false);
+        setShowPaymentDialog(true);
       } else {
-        setError("Failed to create team");
+        setError(response.data?.message || "Failed to create team");
       }
-    } catch {
-      setError("Failed to create team");
+    } catch (err) {
+      console.error("Create team error:", err);
+      setError(err.response?.data?.message || "Failed to create team.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -286,7 +311,8 @@ export default function TeamDashboardPage() {
             <div className="flex gap-3 pt-2">
               <motion.button
                 onClick={() => {
-                  setShowPaymentDialog(true);
+                  // Open create-team modal which only asks for team name, then shows payment dialog
+                  setShowCreateTeamModal(true);
                 }}
                 whileTap={{ scale: 0.95 }}
                 className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white font-semibold rounded-xl shadow-lg transition-all"
@@ -363,16 +389,112 @@ export default function TeamDashboardPage() {
           </div>
         )}
 
+        {/* Create Team Modal (asks only for team name, then opens PaymentDialog) */}
+        {showCreateTeamModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-[#1a1a1a] border-2 border-purple-500/50 rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+              <h3 className="text-xl font-bold text-gray-100">Create Team</h3>
+              <p className="text-sm text-gray-400">Enter a team name. No payment required right now.</p>
+              <input
+                type="text"
+                value={creatingTeamName}
+                onChange={(e) => setCreatingTeamName(e.target.value)}
+                placeholder="Team Name"
+                className="w-full px-4 py-3 text-gray-100 bg-[#2a2a2a] border border-gray-700 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none"
+              />
+              {error && <div className="p-2 text-sm text-red-400">{error}</div>}
+              <div className="flex gap-3 pt-2">
+                <motion.button
+                  onClick={() => setShowCreateTeamModal(false)}
+                  whileTap={{ scale: 0.95 }}
+                  className="w-full py-3 bg-white hover:bg-[#b800ff] text-black hover:text-white  font-semibold rounded-xl shadow-lg transition-all"
+                >
+                  Cancel
+                </motion.button>
+
+                <motion.button
+                  onClick={() => handleCreateTeamRequest(creatingTeamName)}
+                  whileTap={{ scale: 0.95 }}
+                  className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white  font-semibold rounded-xl shadow-lg transition-all"
+                >
+                  Create
+                </motion.button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <PaymentDialog
           isOpen={showPaymentDialog}
           onClose={() => setShowPaymentDialog(false)}
           onSubmit={handlePaymentSubmit}
+          amount={1} // ₹1 for testing
+          formData={{ teamName: creatingTeamName }}
+          paymentSuccess={false}
         />
       </div>
     );
   }
 
-  // If team exists → show dashboard
+  // If team exists → show dashboard or payment prompt when payment pending
+  const paymentPending = (() => {
+    const t = teamData || {};
+
+    if (t.isPendingPayment === true) return true;
+    if (t.isPaid === false) return true;
+    if (t.paymentStatus && ["pending", "unpaid", "failed"].includes(String(t.paymentStatus).toLowerCase())) return true;
+    return false;
+  })();
+
+  if (paymentPending) {
+    return (
+      <div className="relative bg-gradient-to-r from-[#211E3F] to-black text-white overflow-hidden min-h-screen">
+        <Header />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-purple-900/30 via-purple-950/10 to-transparent pointer-events-none"></div>
+
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] border-2 border-purple-500/50 rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-xl font-bold text-gray-100 text-center">Team Payment Pending</h3>
+            <p className="text-sm text-gray-400 text-center">Your team needs a completed payment to be activated. Complete payment below to activate your team.</p>
+
+            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg text-center">
+              <div className="text-xs text-gray-400">Team Code</div>
+              <div className="text-2xl font-semibold text-purple-300">{teamData?.code || teamData?.id || 'N/A'}</div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <motion.button
+                onClick={() => setShowPaymentDialog(true)}
+                whileTap={{ scale: 0.95 }}
+                className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white font-semibold rounded-xl shadow-lg"
+              >
+                Complete Payment
+              </motion.button>
+
+              <motion.button
+                onClick={() => navigate('/')}
+                whileTap={{ scale: 0.95 }}
+                className="w-full py-3 bg-white hover:bg-[#b800ff] text-black hover:text-white font-semibold rounded-xl shadow-lg"
+              >
+                Back to Home
+              </motion.button>
+            </div>
+          </div>
+        </div>
+
+        <PaymentDialog
+          isOpen={showPaymentDialog}
+          onClose={() => setShowPaymentDialog(false)}
+          onSubmit={handlePaymentSubmit}
+          amount={1}
+          formData={{ teamName: teamData?.name }}
+          paymentSuccess={false}
+        />
+      </div>
+    );
+  }
+
+  // Default: show full team dashboard
   return (
     <TeamDetailsPage
       teamData={teamData}
