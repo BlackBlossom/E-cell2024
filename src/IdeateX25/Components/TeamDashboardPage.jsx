@@ -462,8 +462,8 @@ export default function TeamDashboardPage() {
             <p className="text-sm text-gray-400 text-center">Your team needs a completed payment to be activated. Complete payment below to activate your team.</p>
 
             <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg text-center">
-              <div className="text-xs text-gray-400">Team Code</div>
-              <div className="text-2xl font-semibold text-purple-300">{teamData?.code || teamData?.id || 'N/A'}</div>
+              <div className="text-xs text-gray-400">Team Name</div>
+              <div className="text-2xl font-semibold text-purple-300">{teamData?.name ||  'N/A'}</div>
             </div>
 
             <div className="flex gap-3 pt-2">
