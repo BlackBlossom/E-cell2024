@@ -79,6 +79,7 @@ export default function TeamDashboardPage() {
       );
 
       if (response.data.success) {
+        console.log("Team members response:", response.data);
         const apiMembers = response.data.data.members || [];
         
 

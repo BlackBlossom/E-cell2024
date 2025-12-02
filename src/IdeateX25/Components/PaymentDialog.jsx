@@ -1,6 +1,7 @@
 import { X, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import PropTypes from "prop-types";
 
 // Razorpay payment dialog - creates order on backend and opens Razorpay checkout
 export default function PaymentDialog({ isOpen, onClose, onSubmit, formData, paymentSuccess, amount = 100 }) {
@@ -113,7 +114,15 @@ export default function PaymentDialog({ isOpen, onClose, onSubmit, formData, pay
                 backendResponse: verifyResp,
               });
               setIsProcessing(false);
-              // leave dialog open while parent handles navigation or close here
+              
+              // close dialog and reload page so app state is fresh
+              try {
+                if (typeof onClose === "function") onClose();
+              } catch (e) {
+                /* ignore close errors */
+              }
+              // give parent a moment then reload
+              setTimeout(() => window.location.reload(), 250);
             } else {
               setError(verifyResp.message || "Payment verification failed");
               setIsProcessing(false);
@@ -215,3 +224,12 @@ export default function PaymentDialog({ isOpen, onClose, onSubmit, formData, pay
     </div>
   );
 }
+
+PaymentDialog.propTypes = {
+  isOpen: PropTypes.bool,
+  onClose: PropTypes.func,
+  onSubmit: PropTypes.func,
+  formData: PropTypes.object,
+  paymentSuccess: PropTypes.bool,
+  amount: PropTypes.number,
+};
