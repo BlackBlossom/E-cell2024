@@ -56,7 +56,7 @@ export default function TeamDashboardPage() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const [creatingTeamName, setCreatingTeamName] = useState("");
-
+  const [ispaymentPending, setIsPaymentPending] = useState(false);
   const fetchTeamMembers = async () => {
     const teamId = localStorage.getItem("ideatex_teamID");
 
@@ -80,6 +80,12 @@ export default function TeamDashboardPage() {
 
       if (response.data.success) {
         const apiMembers = response.data.data.members || [];
+        
+
+        if(response.data.data.teamStatus.isPendingPayment){
+          setIsPaymentPending(true);
+        }
+
         const leaderMember =
           apiMembers.find((m) => m.role === "LEADER") || apiMembers[0];
 
@@ -439,8 +445,8 @@ export default function TeamDashboardPage() {
   // If team exists → show dashboard or payment prompt when payment pending
   const paymentPending = (() => {
     const t = teamData || {};
-
     if (t.isPendingPayment === true ) return true;
+    if (ispaymentPending === true ) return true;
     return false;
   })();
 
