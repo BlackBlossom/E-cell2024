@@ -7,7 +7,7 @@ export default function PaymentPage() {
   const formData = location.state?.formData || {}
   
   const handlePaymentSubmit = (paymentData) => {
-    console.log('Payment submitted:', paymentData)
+    // console.log('Payment submitted:', paymentData)
     
     // Generate team code and create team data
     const generatedCode = Math.random().toString(36).substring(2, 8).toUpperCase()

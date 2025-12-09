@@ -1,4 +1,4 @@
-// src/IdeateX-25/context/AuthContext.jsx
+// src/IdeateX25/context/AuthContext.jsx
 import { createContext, useState, useContext, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';

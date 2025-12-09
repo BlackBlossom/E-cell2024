@@ -27,6 +27,8 @@ export default function RegistrationPage() {
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [creatingTeamName, setCreatingTeamName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -82,10 +84,10 @@ export default function RegistrationPage() {
         payload
       );
       if (response.status === 201) {
-        console.log(
-          "User registered successfully, showing OTP verification",
-          formData
-        );
+        // console.log(
+        //   "User registered successfully, showing OTP verification",
+        //   formData
+        // );
         setShowOtpVerification(true);
       }
     } catch (err) {
@@ -132,7 +134,8 @@ export default function RegistrationPage() {
         }
 
         setShowOtpVerification(false);
-        setShowSuccessPopup(true);
+        // setShowSuccessPopup(true);
+        window.open("/ideatex/dashboard");
       }
     } catch (err) {
       console.error("OTP verification failed:", err);
@@ -168,7 +171,7 @@ export default function RegistrationPage() {
       );
 
       if (response.data.success === true) {
-        console.log("Joined team successfully:", response.data);
+        // console.log("Joined team successfully:", response.data);
         // Save team data if needed
         localStorage.setItem("ideatex_teamID", response.data.data.team._id);
         localStorage.setItem("ideatex_userID", response.data.data.userId);
@@ -197,50 +200,69 @@ export default function RegistrationPage() {
     setShowSuccessPopup(true);
   };
 
-  const handlePaymentSubmit = async (paymentData) => {
-    try {
-      const formData = new FormData();
-      formData.append("teamName", paymentData.teamName);
-      formData.append("paymentTransactionId", paymentData.transactionId);
-      formData.append("paymentScreenshot", paymentData.screenshot);
+  const API_BASE = import.meta.env.VITE_IDEATEX_API_BASE_URL;
 
+  // Create team (no payment) — only teamName is required
+  const handleCreateTeamRequest = async (teamName) => {
+    if (!teamName || !teamName.trim()) {
+      setError("Team name is required");
+      return;
+    }
+    setError("");
+    setIsLoading(true);
+    try {
       const response = await axios.post(
-        `${import.meta.env.VITE_IDEATEX_API_BASE_URL}/api/v1/addTeam`,
-        formData,
+        `${API_BASE}/api/v1/addTeam`,
+        { teamName },
         {
           headers: {
-            "Content-Type": "multipart/form-data",
             Authorization: `Bearer ${localStorage.getItem("ideatex_token")}`,
+            "Content-Type": "application/json",
           },
         }
       );
 
-      console.log(response.success, response);
-      if (response.data.success === true) {
-        console.log("Team created successfully:", response.data);
+      if (response.data?.success) {
+        const team = response.data.data.team;
+        // store team id so payment dialog can create order using teamId
+        localStorage.setItem("ideatex_teamID", team._id || team.teamId || team.id);
+        localStorage.setItem("ideatex_userID", response.data.data.team.leaderId || response.data.data.team.leaderId || localStorage.getItem("ideatex_userID"));
+        // set formData.teamName so PaymentDialog shows it
+        setFormData((prev) => ({ ...prev, teamName }));
+        setShowCreateTeamModal(false);
+        // setShowPaymentDialog(true);
+        window.open("/ideatex/dashboard");
+        } else {
+        setError(response.data?.message || "Failed to create team");
+      }
+    } catch (err) {
+      console.error("Create team error:", err);
+      setError(err.response?.data?.message || "Failed to create team.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePaymentSubmit = async (paymentData) => {
+    // paymentData expected shape: { transactionId, teamName, paymentVerified, backendResponse }
+    try {
+      if (paymentData.paymentVerified && paymentData.backendResponse?.success) {
+        const team = paymentData.backendResponse.data.team;
+        const teamId = team._id || team.teamId || team.id;
+        const leaderId = team.leaderId || team.leader || paymentData.backendResponse.data.team.leaderId;
+        if (teamId) localStorage.setItem("ideatex_teamID", teamId);
+        if (leaderId) localStorage.setItem("ideatex_userID", leaderId);
         setPaymentSuccess(true);
-
-        // Save team data to localStorage
-        localStorage.setItem("ideatex_teamID", response.data.data.team._id);
-        localStorage.setItem(
-          "ideatex_userID",
-          response.data.data.team.leaderId
-        );
-
+        setShowPaymentDialog(false);
         setTimeout(() => {
           window.location.href = "/ideatex/dashboard";
-        }, 3000);
+        }, 1500);
       } else {
-        console.error("Unexpected response status:", response.status);
-        setError("Failed to create team. Please try again.");
+        setError(paymentData.backendResponse?.message || "Payment verification failed. Please try again.");
       }
     } catch (error) {
-      console.error("Error creating team:", error);
-      if (error.response && error.response.status === 400) {
-        setError("Invalid data provided. Please check your inputs.");
-      } else {
-        setError("Failed to create team. Please try again.");
-      }
+      console.error("Error handling payment submit:", error);
+      setError("Failed to process payment result. Please try again.");
     }
   };
 
@@ -606,11 +628,12 @@ export default function RegistrationPage() {
               Welcome to IdeateX 2025! Choose how you&apos;d like to proceed.
             </p>
 
-            <div className="flex gap-3 pt-2">
+              <div className="flex gap-3 pt-2">
               <motion.button
                 onClick={() => {
                   setShowSuccessPopup(false);
-                  setShowPaymentDialog(true);
+                  // Open create-team modal which only asks for team name, then shows payment dialog
+                  setShowCreateTeamModal(true);
                 }}
                 whileTap={{ scale: 0.95 }}
                 className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white font-semibold rounded-xl shadow-lg transition-all"
@@ -657,7 +680,8 @@ export default function RegistrationPage() {
                   // Navigate to sign in page or handle sign in
                   setShowAlreadyRegistered(false);
                   // You can add navigation logic here, e.g., window.location.href = '/signin';
-                  alert("Redirecting to sign in...");
+                  // alert("Redirecting to sign in...");
+                  window.open("/ideatex/login");
                 }}
                 whileTap={{ scale: 0.95 }}
                 className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white font-semibold rounded-xl shadow-lg transition-all"
@@ -670,6 +694,44 @@ export default function RegistrationPage() {
       )}
 
       {/* Payment Dialog (opens instead of navigating to /payment) */}
+      {/* Create Team Modal (asks only for team name, then opens PaymentDialog) */}
+      {showCreateTeamModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] border-2 border-purple-500/50 rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-xl font-bold text-gray-100">Create Team</h3>
+            <p className="text-sm text-gray-400">Enter a team name. No payment required right now.</p>
+            <input
+              type="text"
+              value={creatingTeamName}
+              onChange={(e) => setCreatingTeamName(e.target.value)}
+              placeholder="Team Name"
+              className="w-full px-4 py-3 text-gray-100 bg-[#2a2a2a] border border-gray-700 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none"
+            />
+            {error && <div className="p-2 text-sm text-red-400">{error}</div>}
+            <div className="flex gap-3 pt-2">
+              <motion.button
+                onClick={() => {
+                  setShowCreateTeamModal(false);
+                  setShowSuccessPopup(true);
+                }}
+                whileTap={{ scale: 0.95 }}
+                className="w-full py-3 bg-white hover:bg-[#b800ff] text-black hover:text-white  font-semibold rounded-xl shadow-lg transition-all"
+              >
+                Cancel
+              </motion.button>
+
+              <motion.button
+                onClick={() => handleCreateTeamRequest(creatingTeamName)}
+                whileTap={{ scale: 0.95 }}
+                className="w-full py-3 bg-[#9700d1] hover:bg-[#b800ff] text-white  font-semibold rounded-xl shadow-lg transition-all"
+              >
+                Create
+              </motion.button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <PaymentDialog
         isOpen={showPaymentDialog}
         onClose={() => {
@@ -679,6 +741,7 @@ export default function RegistrationPage() {
         onSubmit={handlePaymentSubmit}
         formData={formData}
         paymentSuccess={paymentSuccess}
+        amount={1} // ₹1 for now
       />
     </div>
   );
