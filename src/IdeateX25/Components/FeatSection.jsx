@@ -2,7 +2,7 @@
 import { UsersRound, IndianRupee, Network } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRef } from "react";
-import EventCard from "../../IdeateX/components/EventCard";
+import EventCard from "@/IdeateX/components/EventCard";
 
 export default function FeatSection() {
   const containerRef = useRef(null);
