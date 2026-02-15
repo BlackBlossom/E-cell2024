@@ -1,8 +1,18 @@
-import { X, Copy, UserCircle2, Crown, Hash, QrCode, Pencil } from "lucide-react";
-import {  useState, useEffect } from "react";
+import {
+  X,
+  Copy,
+  UserCircle2,
+  Crown,
+  Hash,
+  QrCode,
+  Pencil,
+  Download,
+} from "lucide-react";
+import { useState, useEffect } from "react";
 import Header from "./Header";
 import PropTypes from "prop-types"; // Import PropTypes
 import axios from "axios";
+import certTemplate from "../../assets/end25-cer.png";
 
 export default function TeamDetailsPage({
   teamData,
@@ -27,34 +37,36 @@ export default function TeamDetailsPage({
   const [editLoading, setEditLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [userLoading, setUserLoading] = useState(true);
-
-
+  const [certPublished, setCertPublished] = useState(false);
 
   // Fetch current user details
   useEffect(() => {
     const fetchUserDetails = async () => {
       try {
-        const userId = localStorage.getItem('ideatex_userID');
+        const userId = localStorage.getItem("ideatex_userID");
         if (!userId) {
-          console.error('User ID not found in localStorage');
+          console.error("User ID not found in localStorage");
           setUserLoading(false);
           return;
         }
 
-        const response = await axios.get(`${import.meta.env.VITE_IDEATEX_API_BASE_URL}/api/v1/user/${userId}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('ideatex_token')}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const response = await axios.get(
+          `${import.meta.env.VITE_IDEATEX_API_BASE_URL}/api/v1/user/${userId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("ideatex_token")}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
 
         if (response.data.success) {
           setCurrentUser(response.data.data.user);
         } else {
-          console.error('Failed to fetch user details:', response.data.message);
+          console.error("Failed to fetch user details:", response.data.message);
         }
       } catch (error) {
-        console.error('Error fetching user details:', error);
+        console.error("Error fetching user details:", error);
       } finally {
         setUserLoading(false);
       }
@@ -63,12 +75,36 @@ export default function TeamDetailsPage({
     fetchUserDetails();
   }, []);
 
+  // Fetch certificate status
+  useEffect(() => {
+    const fetchCertStatus = async () => {
+      try {
+        const response = await axios.get(
+          `${
+            import.meta.env.VITE_IDEATEX_API_BASE_URL
+          }/api/v1/settings/certificate/status`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("ideatex_token")}`,
+            },
+          }
+        );
+        if (response.data.success) {
+          setCertPublished(response.data.data.certificatePublished);
+        }
+      } catch (error) {
+        console.error("Error fetching certificate status:", error);
+      }
+    };
+
+    fetchCertStatus();
+  }, []);
+
   // Determine if current user is the team leader
   const isCurrentUserLeader = () => {
     if (!currentUser || !teamData) return false;
     return currentUser.libId === teamData.leader.libraryId;
   };
-
 
   const handleCopyTeamCode = async () => {
     try {
@@ -113,17 +149,21 @@ export default function TeamDetailsPage({
     setEditLoading(true);
 
     try {
-      const userId = localStorage.getItem('ideatex_userID');
-      const response = await axios.put(`${import.meta.env.VITE_IDEATEX_API_BASE_URL}/api/v1/user/${userId}`, {
-        name: editFormData.name,
-        rollNo: editFormData.rollNo,
-        college: editFormData.college,
-      }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('ideatex_token')}`,
-          'Content-Type': 'application/json',
+      const userId = localStorage.getItem("ideatex_userID");
+      const response = await axios.put(
+        `${import.meta.env.VITE_IDEATEX_API_BASE_URL}/api/v1/user/${userId}`,
+        {
+          name: editFormData.name,
+          rollNo: editFormData.rollNo,
+          college: editFormData.college,
         },
-      });
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("ideatex_token")}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.data.success) {
         // Update the teamData
@@ -176,6 +216,58 @@ export default function TeamDetailsPage({
     } finally {
       setQrLoading(false);
     }
+  };
+
+  const handleDownloadCertificate = (name, college, eventName) => {
+    const canvas = document.createElement("canvas");
+    const img = new Image();
+    img.src = certTemplate;
+
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+
+      // Draw the certificate template
+      ctx.drawImage(img, 0, 0);
+
+      // Set text styles
+      ctx.fillStyle = "#000000"; // Black text
+      ctx.textAlign = "left"; // Changed to left for precise measurement
+
+      // 1. Participant Name
+      ctx.font = "bold 42px Poppins, sans-serif";
+      const nameWidth = ctx.measureText(name).width;
+      ctx.fillText(name, (canvas.width - nameWidth) / 2, canvas.height * 0.59);
+
+      // 2. College Name
+      ctx.font = "bold 32px Poppins, sans-serif";
+      const collegeWidth = ctx.measureText(college).width;
+      ctx.fillText(
+        college,
+        (canvas.width - collegeWidth) / 2.2,
+        canvas.height * 0.67
+      );
+
+      // 3. Event Name
+      ctx.font = "bold 32px Poppins, sans-serif";
+      const eventWidth = ctx.measureText(eventName).width;
+      ctx.fillText(
+        eventName,
+        (canvas.width - eventWidth) / 2.5,
+        canvas.height * 0.71
+      );
+
+      // Trigger download
+      const link = document.createElement("a");
+      link.download = `IdeateX25_Certificate_${name.replace(/\s+/g, "_")}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    };
+
+    img.onerror = () => {
+      console.error("Error loading certificate template");
+    };
   };
 
   return (
@@ -282,9 +374,12 @@ export default function TeamDetailsPage({
                       <div className="p-6">
                         <div className="flex items-center justify-center bg-black/40 px-6 py-8 rounded-lg border border-gray-500/30">
                           <div className="text-center">
-                         
-                            <p className="text-sm font-semibold text-gray-300">Ask Team Leader</p>
-                            <p className="text-xs text-gray-500 mt-1">Only team leaders can view the code</p>
+                            <p className="text-sm font-semibold text-gray-300">
+                              Ask Team Leader
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Only team leaders can view the code
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -314,6 +409,43 @@ export default function TeamDetailsPage({
                       </p>
                     </div>
                   </div>
+
+                  {/* Certificate Download Card - only shown if published */}
+                  {certPublished && (
+                    <div className="md:col-span-3 bg-gradient-to-r from-purple-900/40 to-violet-900/40 border-2 border-purple-500/50 text-white rounded-xl shadow-xl overflow-hidden">
+                      <div className="p-6 border-b border-purple-500/30">
+                        <h3 className="flex items-center gap-2 text-xl font-semibold">
+                          <Download className="h-5 w-5 text-purple-400" />
+                          Certificate
+                        </h3>
+                      </div>
+                      <div className="p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="space-y-2 text-center md:text-left">
+                          <p className="text-lg font-medium text-white">
+                            Congratulations!
+                          </p>
+                          <p className="text-sm text-gray-300">
+                            Your certificate of participation for IdeateX25 is
+                            now available for download.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            handleDownloadCertificate(
+                              currentUser?.name || "Participant",
+                              currentUser?.college ||
+                                "KIET Group of Institutions",
+                              "IdeateX 25"
+                            )
+                          }
+                          className="flex items-center gap-2 px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-full shadow-lg transition-all"
+                        >
+                          <Download className="h-5 w-5" />
+                          Download Certificate
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Team Details Section */}
@@ -325,52 +457,60 @@ export default function TeamDetailsPage({
                   </div>
                   <div className="p-6 space-y-6">
                     {/* Your Details */}
-             <div className="p-6 bg-gradient-to-br from-purple-900/20 to-violet-900/20 rounded-xl border-2 border-purple-500/50">
+                    <div className="p-6 bg-gradient-to-br from-purple-900/20 to-violet-900/20 rounded-xl border-2 border-purple-500/50">
+                      {/* Top Row: Title + Edit Icon */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <Crown className="h-6 w-6 text-yellow-400" />
+                          <h3 className="text-lg font-bold text-white">
+                            Your Details
+                          </h3>
+                        </div>
 
-  {/* Top Row: Title + Edit Icon */}
-  <div className="flex items-center justify-between mb-4">
-    <div className="flex items-center gap-3">
-      <Crown className="h-6 w-6 text-yellow-400" />
-      <h3 className="text-lg font-bold text-white">Your Details</h3>
-    </div>
+                        <button
+                          onClick={handleEditProfile}
+                          className="p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 transition-colors"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </div>
 
-    <button
-      onClick={handleEditProfile}
-      className="p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 transition-colors"
-    >
-      <Pencil className="h-4 w-4" />
-    </button>
-  </div>
-
-  {/* Info Grid */}
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-    <div className="space-y-1">
-      <p className="text-xs text-gray-400">Name</p>
-      <p className="text-sm font-semibold text-white">
-        {userLoading ? "Loading..." : currentUser?.name || "N/A"}
-      </p>
-    </div>
-    <div className="space-y-1">
-      <p className="text-xs text-gray-400">Year</p>
-      <p className="text-sm font-semibold text-white">
-        {userLoading ? "Loading..." : currentUser?.year || "N/A"}
-      </p>
-    </div>
-    <div className="space-y-1">
-      <p className="text-xs text-gray-400">Roll No.</p>
-      <p className="text-sm font-semibold text-white">
-        {userLoading ? "Loading..." : currentUser?.rollNo || "N/A"}
-      </p>
-    </div>
-    <div className="space-y-1">
-      <p className="text-xs text-gray-400">Gender</p>
-      <p className="text-sm font-semibold text-white">
-        {userLoading ? "Loading..." : currentUser?.gender || "N/A"}
-      </p>
-    </div>
-  </div>
-</div>
-
+                      {/* Info Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-400">Name</p>
+                          <p className="text-sm font-semibold text-white">
+                            {userLoading
+                              ? "Loading..."
+                              : currentUser?.name || "N/A"}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-400">Year</p>
+                          <p className="text-sm font-semibold text-white">
+                            {userLoading
+                              ? "Loading..."
+                              : currentUser?.year || "N/A"}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-400">Roll No.</p>
+                          <p className="text-sm font-semibold text-white">
+                            {userLoading
+                              ? "Loading..."
+                              : currentUser?.rollNo || "N/A"}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-400">Gender</p>
+                          <p className="text-sm font-semibold text-white">
+                            {userLoading
+                              ? "Loading..."
+                              : currentUser?.gender || "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
                     {/* Team Members */}
                     <div>
@@ -392,36 +532,38 @@ export default function TeamDetailsPage({
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {teamData.members.map((member) => (
-                         <div
-  key={member.id}
-  className="
+                            <div
+                              key={member.id}
+                              className="
     relative rounded-xl p-5
     bg-black border border-white/10
     hover:border-purple-500/40
     transition-all duration-300 group
   "
->
-  {/* Top Banner */}
-  <div
-    className={`
+                            >
+                              {/* Top Banner */}
+                              <div
+                                className={`
       w-full text-center py-1 text-[10px] font-semibold uppercase tracking-wide
       
-      ${member.role === "LEADER"
-  ? "bg-yellow-400/30 text-yellow-100 backdrop-blur-md border border-yellow-300/40"
-  : "bg-purple-500/10 text-purple-200 backdrop-blur-md border border-purple-400/20"
-}
+      ${
+        member.role === "LEADER"
+          ? "bg-yellow-400/30 text-yellow-100 backdrop-blur-md border border-yellow-300/40"
+          : "bg-purple-500/10 text-purple-200 backdrop-blur-md border border-purple-400/20"
+      }
 
     `}
-  >
-    {member.role === "LEADER" ? "Leader" : "Member"}
-  </div>
+                              >
+                                {member.role === "LEADER" ? "Leader" : "Member"}
+                              </div>
 
-  {/* Remove Button */}
-  {member.role !== "LEADER" && isCurrentUserLeader() && (
-    <button
-      onClick={() => handleRemoveClick(member)}
-      aria-label={`Remove ${member.name}`}
-      className="
+                              {/* Remove Button */}
+                              {member.role !== "LEADER" &&
+                                isCurrentUserLeader() && (
+                                  <button
+                                    onClick={() => handleRemoveClick(member)}
+                                    aria-label={`Remove ${member.name}`}
+                                    className="
         absolute top-3 right-3 flex items-center justify-center 
         h-8 w-8 rounded-full
         text-gray-400 hover:text-white 
@@ -429,49 +571,61 @@ export default function TeamDetailsPage({
         opacity-0 group-hover:opacity-100 
         transition-all duration-300
       "
-    >
-      <X className="h-4 w-4" />
-    </button>
-  )}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                )}
 
-  {/* Placeholder for non-leaders */}
-  {member.role !== "LEADER" && !isCurrentUserLeader() && (
-    <button
-      disabled
-      className="
+                              {/* Placeholder for non-leaders */}
+                              {member.role !== "LEADER" &&
+                                !isCurrentUserLeader() && (
+                                  <button
+                                    disabled
+                                    className="
         absolute top-3 right-3 flex items-center justify-center 
         h-8 w-8 rounded-full
         text-gray-600 cursor-not-allowed
         opacity-0 group-hover:opacity-100 
         transition-all duration-300
       "
-      title="Only team leaders can remove members"
-    >
-      <X className="h-4 w-4" />
-    </button>
-  )}
+                                    title="Only team leaders can remove members"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                )}
 
-  {/* Content */}
-  <div className="grid grid-cols-2 gap-3 text-sm mt-3">
-    <div>
-      <p className="text-xs text-gray-400">Name</p>
-      <p className="font-semibold text-white">{member.name}</p>
-    </div>
-    <div>
-      <p className="text-xs text-gray-400">Year</p>
-      <p className="font-semibold text-white">{member.year}</p>
-    </div>
-    <div>
-      <p className="text-xs text-gray-400">Library ID</p>
-      <p className="font-semibold text-white">{member.rollNo}</p>
-    </div>
-    <div>
-      <p className="text-xs text-gray-400">Gender</p>
-      <p className="font-semibold text-white">{member.gender}</p>
-    </div>
-  </div>
-</div>
-
+                              {/* Content */}
+                              <div className="grid grid-cols-2 gap-3 text-sm mt-3">
+                                <div>
+                                  <p className="text-xs text-gray-400">Name</p>
+                                  <p className="font-semibold text-white">
+                                    {member.name}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-400">Year</p>
+                                  <p className="font-semibold text-white">
+                                    {member.year}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-400">
+                                    Library ID
+                                  </p>
+                                  <p className="font-semibold text-white">
+                                    {member.rollNo}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-400">
+                                    Gender
+                                  </p>
+                                  <p className="font-semibold text-white">
+                                    {member.gender}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -535,7 +689,9 @@ export default function TeamDetailsPage({
                 <img
                   src={
                     qrCodeData.qrCloudUrl ||
-                    `${import.meta.env.VITE_IDEATEX_API_BASE_URL}/api/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                    `${
+                      import.meta.env.VITE_IDEATEX_API_BASE_URL
+                    }/api/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
                       qrCodeData.qrCloudUrl || "QR Code Data"
                     )}`
                   }
@@ -559,7 +715,6 @@ export default function TeamDetailsPage({
               <h3 className="text-lg font-semibold text-white text-center">
                 QR Code Not Available
               </h3>
-            
             </div>
             <div className="text-center">
               <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -586,9 +741,7 @@ export default function TeamDetailsPage({
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white/5 backdrop-blur-xl border-2 border-purple-500/30 rounded-xl shadow-xl p-6 max-w-md w-full space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-white">
-                Edit Profile
-              </h3>
+              <h3 className="text-lg font-semibold text-white">Edit Profile</h3>
               <button
                 onClick={() => {
                   setShowEditProfile(false);
@@ -610,7 +763,9 @@ export default function TeamDetailsPage({
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Roll Number</label>
+                <label className="block text-sm text-gray-400 mb-1">
+                  Roll Number
+                </label>
                 <input
                   type="text"
                   value={editFormData.rollNo}
@@ -620,7 +775,9 @@ export default function TeamDetailsPage({
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">College</label>
+                <label className="block text-sm text-gray-400 mb-1">
+                  College
+                </label>
                 <input
                   type="text"
                   value={editFormData.college}
@@ -630,7 +787,6 @@ export default function TeamDetailsPage({
                 />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-
                 <button
                   type="submit"
                   disabled={editLoading}
