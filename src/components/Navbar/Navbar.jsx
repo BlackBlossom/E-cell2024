@@ -15,7 +15,7 @@ import speakerIcon from "../../assets/navbar/Discover/speaker.png";
 import speakerIconWhite from "../../assets/navbar/Discover/speakerWhite.png";
 import teamIcon from "../../assets/navbar/Discover/team.png";
 import teamIconWhite from "../../assets/navbar/Discover/teamWhite.png";
-import Header from "../../IdeateX/components/Header";
+import Header from "@/IdeateX/components/Header";
 // import EndeavourLogo from "../../assets/navbar/logo1edit.png";
 
 import discordIcon from "../../assets/navbar/Initiative/discord.png";
